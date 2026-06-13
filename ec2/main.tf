@@ -63,6 +63,11 @@ resource "aws_instance" "mysql" {
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.main_sg.id]
 
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
+
   user_data = <<-EOF
     #!/bin/bash
     apt-get update -y
@@ -84,15 +89,32 @@ resource "aws_instance" "mysql" {
 # ---------------- Airbyte + MinIO EC2 ----------------
 resource "aws_instance" "airbyte_minio" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.large"
+  instance_type          = "t3.xlarge" # 4 vCPU / 16 GB — Airbyte (kind) needs the headroom
   key_name               = var.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.main_sg.id]
 
+  root_block_device {
+    volume_size = 50
+    volume_type = "gp3"
+  }
+
   user_data = <<-EOF
     #!/bin/bash
+    set -euxo pipefail
+
+    # ---- Docker (from Docker's official apt repo) ----
+    # Ubuntu's default repos do NOT carry docker-compose-plugin, and a single
+    # missing package aborts the whole apt-get install, so install Docker
+    # properly from Docker's repo.
     apt-get update -y
-    apt-get install -y docker.io docker-compose-plugin curl unzip jq
+    apt-get install -y ca-certificates curl gnupg unzip jq
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+    apt-get update -y
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     systemctl enable docker && systemctl start docker
 
     # ---- MinIO ----
