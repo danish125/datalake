@@ -1,7 +1,7 @@
 variable "key_name" {
   description = "Name of the EC2 key pair"
   type        = string
-  default     = "my-keypair"
+  default     = "datapipeline_keypair"
 }
 
 variable "vpc_id" {
