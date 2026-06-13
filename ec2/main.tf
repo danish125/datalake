@@ -1,3 +1,20 @@
+# Always resolve the latest Ubuntu 22.04 LTS AMI for the current region,
+# so the config isn't tied to a hardcoded ID that gets deregistered.
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
 resource "aws_security_group" "main_sg" {
   name   = "mysql-airbyte-minio-sg"
   vpc_id = var.vpc_id
@@ -40,7 +57,7 @@ resource "aws_security_group" "main_sg" {
 
 # ---------------- MySQL EC2 ----------------
 resource "aws_instance" "mysql" {
-  ami                    = "ami-0c1c30571d2dae5c9" # Ubuntu 22.04 eu-west-2
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.medium"
   key_name               = var.key_name
   subnet_id              = var.subnet_id
@@ -66,7 +83,7 @@ resource "aws_instance" "mysql" {
 
 # ---------------- Airbyte + MinIO EC2 ----------------
 resource "aws_instance" "airbyte_minio" {
-  ami                    = "ami-0c1c30571d2dae5c9"
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.large"
   key_name               = var.key_name
   subnet_id              = var.subnet_id
