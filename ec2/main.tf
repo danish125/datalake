@@ -133,8 +133,18 @@ resource "aws_instance" "airbyte_minio" {
       mc mb local/mysql-ingest
     "
 
-    # ---- Airbyte (via abctl) ----
-    curl -LsfS https://get.airbyte.com | bash -s -- --no-browser
+    # ---- Airbyte (via abctl → runs in a kind/Docker cluster) ----
+    # 1) install the abctl CLI, 2) actually deploy Airbyte.
+    curl -LsfS https://get.airbyte.com | bash
+
+    # --host must match how you reach the UI, so pull this box's public IP
+    # from instance metadata (IMDSv2).
+    TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+    PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/public-ipv4)
+
+    abctl local install --host "$PUBLIC_IP"
   EOF
 
   tags = { Name = "airbyte-minio" }
