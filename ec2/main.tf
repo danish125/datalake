@@ -57,7 +57,7 @@ resource "aws_security_group" "main_sg" {
 
 # ---------------- MySQL EC2 ----------------
 resource "aws_instance" "mysql" {
-  count                  = 0
+  count                  = 1
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.medium"
   key_name               = var.key_name
@@ -89,7 +89,7 @@ resource "aws_instance" "mysql" {
 
 # ---------------- Airbyte + MinIO EC2 ----------------
 resource "aws_instance" "airbyte_minio" {
-  count                  = 0
+  count                  = 1
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.xlarge" # 4 vCPU / 16 GB — Airbyte (kind) needs the headroom
   key_name               = var.key_name
@@ -137,16 +137,11 @@ resource "aws_instance" "airbyte_minio" {
 
     # ---- Airbyte (via abctl → runs in a kind/Docker cluster) ----
     # 1) install the abctl CLI, 2) actually deploy Airbyte.
+    # No --host: abctl rejects raw IPs (ingress needs a domain) and by
+    # default already allows access from any hostname/IP, so the public
+    # IP works for the UI without it.
     curl -LsfS https://get.airbyte.com | bash
-
-    # --host must match how you reach the UI, so pull this box's public IP
-    # from instance metadata (IMDSv2).
-    TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
-      -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
-    PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
-      http://169.254.169.254/latest/meta-data/public-ipv4)
-
-    abctl local install --host "$PUBLIC_IP"
+    abctl local install
   EOF
 
   tags = { Name = "airbyte-minio" }
