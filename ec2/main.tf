@@ -57,6 +57,7 @@ resource "aws_security_group" "main_sg" {
 
 # ---------------- MySQL EC2 ----------------
 resource "aws_instance" "mysql" {
+  count                  = 0
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.medium"
   key_name               = var.key_name
@@ -88,6 +89,7 @@ resource "aws_instance" "mysql" {
 
 # ---------------- Airbyte + MinIO EC2 ----------------
 resource "aws_instance" "airbyte_minio" {
+  count                  = 0
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.xlarge" # 4 vCPU / 16 GB — Airbyte (kind) needs the headroom
   key_name               = var.key_name
@@ -150,7 +152,7 @@ resource "aws_instance" "airbyte_minio" {
   tags = { Name = "airbyte-minio" }
 }
 
-output "mysql_public_ip" { value = aws_instance.mysql.public_ip }
-output "airbyte_minio_ip" { value = aws_instance.airbyte_minio.public_ip }
-output "minio_console_url" { value = "http://${aws_instance.airbyte_minio.public_ip}:9001" }
-output "airbyte_ui_url" { value = "http://${aws_instance.airbyte_minio.public_ip}:8000" }
+output "mysql_public_ip" { value = one(aws_instance.mysql[*].public_ip) }
+output "airbyte_minio_ip" { value = one(aws_instance.airbyte_minio[*].public_ip) }
+output "minio_console_url" { value = try("http://${one(aws_instance.airbyte_minio[*].public_ip)}:9001", null) }
+output "airbyte_ui_url" { value = try("http://${one(aws_instance.airbyte_minio[*].public_ip)}:8000", null) }
