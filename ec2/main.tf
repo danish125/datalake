@@ -57,11 +57,17 @@ resource "aws_security_group" "main_sg" {
 
 # ---------------- MySQL EC2 ----------------
 resource "aws_instance" "mysql" {
+  count                  = 0
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.medium"
   key_name               = var.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.main_sg.id]
+
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
 
   user_data = <<-EOF
     #!/bin/bash
@@ -83,16 +89,34 @@ resource "aws_instance" "mysql" {
 
 # ---------------- Airbyte + MinIO EC2 ----------------
 resource "aws_instance" "airbyte_minio" {
+  count                  = 0
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.large"
+  instance_type          = "t3.xlarge" # 4 vCPU / 16 GB — Airbyte (kind) needs the headroom
   key_name               = var.key_name
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.main_sg.id]
 
+  root_block_device {
+    volume_size = 50
+    volume_type = "gp3"
+  }
+
   user_data = <<-EOF
     #!/bin/bash
+    set -euxo pipefail
+
+    # ---- Docker (from Docker's official apt repo) ----
+    # Ubuntu's default repos do NOT carry docker-compose-plugin, and a single
+    # missing package aborts the whole apt-get install, so install Docker
+    # properly from Docker's repo.
     apt-get update -y
-    apt-get install -y docker.io docker-compose-plugin curl unzip jq
+    apt-get install -y ca-certificates curl gnupg unzip jq
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+    apt-get update -y
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     systemctl enable docker && systemctl start docker
 
     # ---- MinIO ----
@@ -111,14 +135,24 @@ resource "aws_instance" "airbyte_minio" {
       mc mb local/mysql-ingest
     "
 
-    # ---- Airbyte (via abctl) ----
-    curl -LsfS https://get.airbyte.com | bash -s -- --no-browser
+    # ---- Airbyte (via abctl → runs in a kind/Docker cluster) ----
+    # 1) install the abctl CLI, 2) actually deploy Airbyte.
+    curl -LsfS https://get.airbyte.com | bash
+
+    # --host must match how you reach the UI, so pull this box's public IP
+    # from instance metadata (IMDSv2).
+    TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+    PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+      http://169.254.169.254/latest/meta-data/public-ipv4)
+
+    abctl local install --host "$PUBLIC_IP"
   EOF
 
   tags = { Name = "airbyte-minio" }
 }
 
-output "mysql_public_ip" { value = aws_instance.mysql.public_ip }
-output "airbyte_minio_ip" { value = aws_instance.airbyte_minio.public_ip }
-output "minio_console_url" { value = "http://${aws_instance.airbyte_minio.public_ip}:9001" }
-output "airbyte_ui_url" { value = "http://${aws_instance.airbyte_minio.public_ip}:8000" }
+output "mysql_public_ip" { value = one(aws_instance.mysql[*].public_ip) }
+output "airbyte_minio_ip" { value = one(aws_instance.airbyte_minio[*].public_ip) }
+output "minio_console_url" { value = try("http://${one(aws_instance.airbyte_minio[*].public_ip)}:9001", null) }
+output "airbyte_ui_url" { value = try("http://${one(aws_instance.airbyte_minio[*].public_ip)}:8000", null) }
