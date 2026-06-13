@@ -57,7 +57,7 @@ resource "aws_security_group" "main_sg" {
 
 # ---------------- MySQL EC2 ----------------
 resource "aws_instance" "mysql" {
-  count                  = 0
+  count                  = 1
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.medium"
   key_name               = var.key_name
@@ -89,7 +89,7 @@ resource "aws_instance" "mysql" {
 
 # ---------------- Airbyte + MinIO EC2 ----------------
 resource "aws_instance" "airbyte_minio" {
-  count                  = 0
+  count                  = 1
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.xlarge" # 4 vCPU / 16 GB — Airbyte (kind) needs the headroom
   key_name               = var.key_name
