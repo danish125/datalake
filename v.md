@@ -98,5 +98,4 @@ Until confirmed, the role in effect should be checked per workspace before grant
 
 ## References
 
-- [Vault provider: `auth_login_aws` arguments](https://github.com/hashicorp/terraform-provider-vault/blob/main/website/docs/index.html.markdown)
-- [HCP Terraform: dynamic credentials with the AWS provider](https://developer.hashicorp.com/terraform/cloud-docs/dynamic-provider-credentials/aws-configuration)
+- https://registry.terraform.io/providers/hashicorp/vault/latest/docs
